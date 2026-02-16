@@ -53,8 +53,13 @@ def _parse_sheet(wb, sheet_name):
 
     rows_data = {}
     max_data_row = header_row
+    current_row = header_row
     for row in ws.iter_rows(min_row=header_row, max_col=max_col, values_only=False):
-        r = row[0].row
+        # read_only モードでは EmptyCell が返る場合があるので row 属性を安全に取得
+        r = getattr(row[0], 'row', None) if row[0] is not None else None
+        if r is None:
+            r = current_row
+        current_row = r + 1
         values = [cell.value for cell in row]
         if any(v is not None for v in values):
             rows_data[r] = values
