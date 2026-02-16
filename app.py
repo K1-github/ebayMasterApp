@@ -36,7 +36,7 @@ XLSM_PATH = _find_xlsm()
 SHEETS = {
     "仕入・在庫管理表": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "販売管理表": {"header_row": 5, "data_start": 6, "search_col": 0, "search_label": "レコード番号（A列）", "max_col": 28},
-    "無在庫管理表（中古）": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
+    "無在庫管理表(中古)": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
 }
 
 # シートごとのキャッシュ
