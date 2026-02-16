@@ -32,6 +32,7 @@
   <button id="btn-refresh" style="background:#27ae60;">&#x21bb; 最新データ取得</button>
   <span id="refresh-status" style="font-size:0.85rem; color:#888;"></span>
 </div>
+<div id="file-info" style="margin-bottom:16px; padding:10px 14px; background:#e8ecf1; border-radius:6px; font-size:0.85rem; color:#555;"></div>
 
 <!-- 出品管理ID検索 -->
 <div class="panel">
@@ -78,6 +79,19 @@ const cellResult = document.getElementById("cell-result");
 const rowStart = document.getElementById("row-start");
 const rowEnd = document.getElementById("row-end");
 const rangeResult = document.getElementById("range-result");
+
+// ファイル情報取得
+fetch("/api/fileinfo")
+  .then(r => r.json())
+  .then(info => {
+    const el = document.getElementById("file-info");
+    if (info.source === "onedrive") {
+      el.innerHTML = `<b>ソース:</b> OneDrive | <b>ファイル名:</b> ${info.filename || "不明"} | <b>取得日時:</b> ${info.fetched_at || "未取得"} | <b>サイズ:</b> ${info.content_length ? (info.content_length / 1024 / 1024).toFixed(1) + " MB" : "不明"}`;
+    } else {
+      el.innerHTML = `<b>ソース:</b> ローカル | <b>ファイル名:</b> ${info.filename || "不明"} | <b>最終更新:</b> ${info.last_modified || "不明"}`;
+    }
+  })
+  .catch(() => {});
 
 // ID検索
 const searchInput = document.getElementById("search-id");
