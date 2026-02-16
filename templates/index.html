@@ -98,7 +98,12 @@ fetch("/api/sheets")
         resultEl.innerHTML = "検索中...";
         countEl.textContent = "";
         fetch(`/api/search?sheet=${encodeURIComponent(sheet.name)}&q=${encodeURIComponent(q)}`)
-          .then(r => r.json())
+          .then(r => {
+            if (!r.ok && r.headers.get("content-type")?.indexOf("json") === -1) {
+              throw new Error(`サーバーエラー (${r.status})`);
+            }
+            return r.json();
+          })
           .then(data => {
             if (data.error) {
               resultEl.innerHTML = `<span class="error">${data.error}</span>`;
