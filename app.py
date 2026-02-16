@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from functools import wraps
 import openpyxl
 import os
 import time
@@ -8,6 +9,18 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
+
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if APP_PASSWORD and not session.get("authenticated"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
 
 ONEDRIVE_SHARE_URL = os.environ.get("ONEDRIVE_SHARE_URL", "").strip()
 XLSM_PATH = os.path.join(os.path.dirname(__file__), "..", "ebayマスタコピー.xlsm")
@@ -81,12 +94,26 @@ def _get_data_local():
     return _cache["rows_data"], _cache["headers"]
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not APP_PASSWORD:
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        if request.form.get("password") == APP_PASSWORD:
+            session["authenticated"] = True
+            return redirect(url_for("index"))
+        return render_template("login.html", error="パスワードが違います")
+    return render_template("login.html")
+
+
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/api/refresh", methods=["POST"])
+@login_required
 def api_refresh():
     """キャッシュをクリアして最新データを再取得する"""
     if ONEDRIVE_SHARE_URL:
@@ -99,12 +126,14 @@ def api_refresh():
 
 
 @app.route("/api/headers")
+@login_required
 def api_headers():
     _, headers = get_data()
     return jsonify(headers)
 
 
 @app.route("/api/cell")
+@login_required
 def get_cell():
     try:
         col = int(request.args.get("col", 1))
@@ -128,7 +157,43 @@ def get_cell():
     })
 
 
+@app.route("/api/search")
+@login_required
+def api_search():
+    """出品管理ID（B列）で行を検索し、該当行の全データを返す"""
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"error": "検索IDを入力してください"}), 400
+
+    rows_data, headers = get_data()
+
+    matched = []
+    for r in range(DATA_START_ROW, DATA_END_ROW + 1):
+        row_values = rows_data.get(r)
+        if not row_values:
+            continue
+        b_val = row_values[1]  # B列 = index 1
+        if b_val is None:
+            continue
+        # 数値の場合 12345.0 → "12345" に変換
+        b_str = str(int(b_val)) if isinstance(b_val, float) and b_val == int(b_val) else str(b_val)
+        if query in b_str.strip():
+            row_data = {}
+            for col in range(MAX_COL):
+                val = row_values[col] if col < len(row_values) else None
+                row_data[headers[col]["letter"]] = str(val) if val is not None else None
+            matched.append({"row": r, "data": row_data})
+
+    return jsonify({
+        "query": query,
+        "count": len(matched),
+        "headers": headers,
+        "rows": matched,
+    })
+
+
 @app.route("/api/range")
+@login_required
 def get_range():
     try:
         row_start = int(request.args.get("row_start", DATA_START_ROW))

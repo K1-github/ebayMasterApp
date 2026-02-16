@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: xlsm-viewer
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: ONEDRIVE_SHARE_URL
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true

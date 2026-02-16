@@ -33,6 +33,18 @@
   <span id="refresh-status" style="font-size:0.85rem; color:#888;"></span>
 </div>
 
+<!-- 出品管理ID検索 -->
+<div class="panel">
+  <h2>出品管理ID検索（B列）</h2>
+  <div class="controls">
+    <label for="search-id">出品管理ID:</label>
+    <input type="text" id="search-id" placeholder="IDを入力" style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; font-size:0.95rem; width:200px;">
+    <button id="btn-search">検索</button>
+  </div>
+  <div id="search-count" style="margin-top:8px; font-size:0.9rem; color:#555;"></div>
+  <div class="table-wrap" id="search-result" style="margin-top:12px;"></div>
+</div>
+
 <!-- セル指定 -->
 <div class="panel">
   <h2>セル指定取得</h2>
@@ -66,6 +78,48 @@ const cellResult = document.getElementById("cell-result");
 const rowStart = document.getElementById("row-start");
 const rowEnd = document.getElementById("row-end");
 const rangeResult = document.getElementById("range-result");
+
+// ID検索
+const searchInput = document.getElementById("search-id");
+const searchResult = document.getElementById("search-result");
+const searchCount = document.getElementById("search-count");
+
+function doSearch() {
+  const q = searchInput.value.trim();
+  if (!q) { searchResult.innerHTML = ""; searchCount.textContent = ""; return; }
+  searchResult.innerHTML = "検索中...";
+  searchCount.textContent = "";
+  fetch(`/api/search?q=${encodeURIComponent(q)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        searchResult.innerHTML = `<span class="error">${data.error}</span>`;
+        return;
+      }
+      searchCount.textContent = `${data.count} 件見つかりました`;
+      if (data.count === 0) {
+        searchResult.innerHTML = "";
+        return;
+      }
+      let html = "<table><thead><tr><th>行</th>";
+      data.headers.forEach(h => { html += `<th>${h.letter}: ${h.name}</th>`; });
+      html += "</tr></thead><tbody>";
+      data.rows.forEach(row => {
+        html += `<tr><td>${row.row}</td>`;
+        data.headers.forEach(h => {
+          const v = row.data[h.letter];
+          html += `<td>${v !== null ? v : ""}</td>`;
+        });
+        html += "</tr>";
+      });
+      html += "</tbody></table>";
+      searchResult.innerHTML = html;
+    })
+    .catch(err => { searchResult.innerHTML = `<span class="error">通信エラー: ${err}</span>`; });
+}
+
+document.getElementById("btn-search").addEventListener("click", doSearch);
+searchInput.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
 
 // 更新ボタン
 document.getElementById("btn-refresh").addEventListener("click", () => {
