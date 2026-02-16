@@ -45,7 +45,14 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
     # セッションを使ってリダイレクトチェーンを追跡（Cookie が必要）
     session = requests.Session()
     download_url = _build_download_url(share_url)
-    resp = session.get(download_url, timeout=60)
+    # OneDrive CDN キャッシュ回避
+    headers = {
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache",
+    }
+    # タイムスタンプでURL一意化（CDNキャッシュ回避）
+    download_url += f"&_t={int(time.time())}"
+    resp = session.get(download_url, headers=headers, timeout=60)
     resp.raise_for_status()
 
     # レスポンスヘッダーからファイル名を取得
