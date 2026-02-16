@@ -204,16 +204,19 @@ def api_search():
     query = request.args.get("q", "").strip()
 
     if sheet not in SHEETS:
-        return jsonify({"error": "無効なシート名です"}), 400
+        return jsonify({"error": f"無効なシート名です: {sheet}"}), 400
     if not query:
         return jsonify({"error": "検索IDを入力してください"}), 400
 
-    cfg = SHEETS[sheet]
-    search_col = cfg["search_col"]
-    data_start = cfg["data_start"]
-    max_col = cfg["max_col"]
+    try:
+        cfg = SHEETS[sheet]
+        search_col = cfg["search_col"]
+        data_start = cfg["data_start"]
+        max_col = cfg["max_col"]
 
-    rows_data, headers, max_row = get_sheet_data(sheet)
+        rows_data, headers, max_row = get_sheet_data(sheet)
+    except Exception as e:
+        return jsonify({"error": f"シート読み込みエラー: {sheet} - {str(e)}"}), 500
 
     matched = []
     for r in range(data_start, max_row + 1):
