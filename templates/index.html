@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>xlsm データビューア</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Meiryo", sans-serif; background: #f5f7fa; color: #333; padding: 20px; }
+  h1 { margin-bottom: 20px; font-size: 1.4rem; }
+  .panel { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .panel h2 { font-size: 1.1rem; margin-bottom: 12px; color: #555; }
+  label { font-weight: 600; margin-right: 6px; }
+  select, input[type="number"] { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
+  button { padding: 6px 16px; border: none; border-radius: 4px; background: #4a90d9; color: #fff; font-size: 0.95rem; cursor: pointer; margin-left: 8px; }
+  button:hover { background: #357abd; }
+  .result { margin-top: 12px; padding: 12px; background: #f0f4f8; border-radius: 4px; min-height: 40px; }
+  .result .label { font-size: 0.85rem; color: #888; }
+  .result .value { font-size: 1.2rem; font-weight: 600; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { background: #e8ecf1; position: sticky; top: 0; }
+  .table-wrap { max-height: 500px; overflow: auto; }
+  .error { color: #d9534f; }
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+  <h1 style="margin-bottom:0;">xlsm データビューア — 仕入・在庫管理表</h1>
+  <button id="btn-refresh" style="background:#27ae60;">&#x21bb; 最新データ取得</button>
+  <span id="refresh-status" style="font-size:0.85rem; color:#888;"></span>
+</div>
+
+<!-- セル指定 -->
+<div class="panel">
+  <h2>セル指定取得</h2>
+  <div class="controls">
+    <label for="col-select">列:</label>
+    <select id="col-select"></select>
+    <label for="row-input">行:</label>
+    <input type="number" id="row-input" min="6" max="4847" value="6" style="width:90px">
+    <button id="btn-cell">取得</button>
+  </div>
+  <div class="result" id="cell-result">列と行を指定して「取得」を押してください。</div>
+</div>
+
+<!-- 範囲表示 -->
+<div class="panel">
+  <h2>範囲データ表示</h2>
+  <div class="controls">
+    <label for="row-start">開始行:</label>
+    <input type="number" id="row-start" min="6" max="4847" value="6" style="width:90px">
+    <label for="row-end">終了行:</label>
+    <input type="number" id="row-end" min="6" max="4847" value="25" style="width:90px">
+    <button id="btn-range">表示</button>
+  </div>
+  <div class="table-wrap" id="range-result" style="margin-top:12px;"></div>
+</div>
+
+<script>
+const colSelect = document.getElementById("col-select");
+const rowInput = document.getElementById("row-input");
+const cellResult = document.getElementById("cell-result");
+const rowStart = document.getElementById("row-start");
+const rowEnd = document.getElementById("row-end");
+const rangeResult = document.getElementById("range-result");
+
+// 更新ボタン
+document.getElementById("btn-refresh").addEventListener("click", () => {
+  const status = document.getElementById("refresh-status");
+  const btn = document.getElementById("btn-refresh");
+  btn.disabled = true;
+  status.textContent = "更新中...";
+  fetch("/api/refresh", { method: "POST" })
+    .then(r => r.json())
+    .then(data => {
+      status.textContent = `更新完了！（${data.elapsed_s}秒）`;
+      setTimeout(() => { status.textContent = ""; }, 5000);
+    })
+    .catch(e => { status.textContent = "更新失敗: " + e; })
+    .finally(() => { btn.disabled = false; });
+});
+
+// ヘッダー読み込み
+fetch("/api/headers")
+  .then(r => r.json())
+  .then(headers => {
+    headers.forEach(h => {
+      const opt = document.createElement("option");
+      opt.value = h.col;
+      opt.textContent = `${h.letter}: ${h.name}`;
+      colSelect.appendChild(opt);
+    });
+  });
+
+// セル取得
+document.getElementById("btn-cell").addEventListener("click", () => {
+  const col = colSelect.value;
+  const row = rowInput.value;
+  cellResult.innerHTML = "読み込み中...";
+  fetch(`/api/cell?col=${col}&row=${row}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        cellResult.innerHTML = `<span class="error">${data.error}</span>`;
+      } else {
+        cellResult.innerHTML =
+          `<div class="label">${data.header} (行 ${data.row})</div>` +
+          `<div class="value">${data.value !== null ? data.value : "<em>空</em>"}</div>`;
+      }
+    })
+    .catch(e => { cellResult.innerHTML = `<span class="error">通信エラー: ${e}</span>`; });
+});
+
+// 範囲取得
+document.getElementById("btn-range").addEventListener("click", () => {
+  const s = rowStart.value;
+  const e = rowEnd.value;
+  rangeResult.innerHTML = "読み込み中...";
+  fetch(`/api/range?row_start=${s}&row_end=${e}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        rangeResult.innerHTML = `<span class="error">${data.error}</span>`;
+        return;
+      }
+      let html = "<table><thead><tr><th>行</th>";
+      data.headers.forEach(h => { html += `<th>${h.letter}: ${h.name}</th>`; });
+      html += "</tr></thead><tbody>";
+      data.rows.forEach(row => {
+        html += `<tr><td>${row.row}</td>`;
+        data.headers.forEach(h => {
+          const v = row.data[h.letter];
+          html += `<td>${v !== null ? v : ""}</td>`;
+        });
+        html += "</tr>";
+      });
+      html += "</tbody></table>";
+      rangeResult.innerHTML = html;
+    })
+    .catch(err => { rangeResult.innerHTML = `<span class="error">通信エラー: ${err}</span>`; });
+});
+</script>
+
+</body>
+</html>
