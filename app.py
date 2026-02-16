@@ -153,12 +153,20 @@ def index():
 @login_required
 def api_refresh():
     if ONEDRIVE_SHARE_URL:
-        _refresh_onedrive()
-        t0 = time.time()
-        # 全シート読み込み
-        get_sheet_data(list(SHEETS.keys())[0])
-        elapsed = time.time() - t0
-        return jsonify({"status": "refreshed", "source": "onedrive", "elapsed_s": round(elapsed, 2)})
+        try:
+            _refresh_onedrive()
+            t0 = time.time()
+            get_sheet_data(list(SHEETS.keys())[0])
+            elapsed = time.time() - t0
+            loaded = list(_cache.keys())
+            missing = [s for s in SHEETS if s not in _cache]
+            return jsonify({
+                "status": "refreshed", "source": "onedrive",
+                "elapsed_s": round(elapsed, 2),
+                "loaded_sheets": loaded, "missing_sheets": missing,
+            })
+        except Exception as e:
+            return jsonify({"status": "error", "error": str(e)}), 500
     return jsonify({"status": "skipped", "source": "local", "message": "ローカルモードではmtimeで自動更新されます"})
 
 
