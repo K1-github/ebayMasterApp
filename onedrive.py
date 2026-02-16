@@ -5,13 +5,14 @@
 """
 
 import io
+import re
 import time
 
 import requests
 
 
 # --- キャッシュ ---
-_cache = {"data": None, "fetched_at": 0.0}
+_cache = {"data": None, "fetched_at": 0.0, "filename": None, "content_length": None}
 CACHE_TTL = 300  # 5 分
 
 
@@ -47,7 +48,30 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
     resp = session.get(download_url, timeout=60)
     resp.raise_for_status()
 
+    # レスポンスヘッダーからファイル名を取得
+    filename = None
+    cd = resp.headers.get("Content-Disposition", "")
+    m = re.search(r"filename\*=UTF-8''(.+?)(?:;|$)", cd)
+    if m:
+        from urllib.parse import unquote
+        filename = unquote(m.group(1))
+    else:
+        m = re.search(r'filename="?([^";]+)"?', cd)
+        if m:
+            filename = m.group(1)
+
     buf = io.BytesIO(resp.content)
-    _cache.update(data=buf, fetched_at=time.time())
+    _cache.update(data=buf, fetched_at=time.time(), filename=filename, content_length=len(resp.content))
     buf.seek(0)
     return buf
+
+
+def get_file_info() -> dict:
+    """キャッシュされたファイルの情報を返す"""
+    if _cache["data"] is None:
+        return {"filename": None, "fetched_at": None, "content_length": None}
+    return {
+        "filename": _cache["filename"],
+        "fetched_at": _cache["fetched_at"],
+        "content_length": _cache["content_length"],
+    }

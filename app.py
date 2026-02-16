@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from datetime import datetime, timezone, timedelta
 from functools import wraps
+import glob
 import openpyxl
 import os
 import time
@@ -23,7 +25,12 @@ def login_required(f):
     return decorated
 
 ONEDRIVE_SHARE_URL = os.environ.get("ONEDRIVE_SHARE_URL", "").strip()
-XLSM_PATH = os.path.join(os.path.dirname(__file__), "..", "ebayマスタコピー.xlsm")
+def _find_xlsm():
+    pattern = os.path.join(os.path.dirname(__file__), "..", "ebayマスタ*.xlsm")
+    matches = glob.glob(pattern)
+    return matches[0] if matches else None
+
+XLSM_PATH = _find_xlsm()
 SHEET_NAME = "仕入・在庫管理表"
 HEADER_ROW = 5
 DATA_START_ROW = 6
@@ -86,6 +93,11 @@ def _refresh_onedrive():
 
 def _get_data_local():
     """ローカルファイル版: mtime ベースのキャッシュ"""
+    global XLSM_PATH
+    if not XLSM_PATH:
+        XLSM_PATH = _find_xlsm()
+    if not XLSM_PATH:
+        raise FileNotFoundError("ebayマスタ*.xlsm が見つかりません")
     mtime = os.path.getmtime(XLSM_PATH)
     if _cache["mtime"] != mtime or _cache["source"] != "local":
         wb = openpyxl.load_workbook(XLSM_PATH, data_only=True, keep_vba=False, read_only=True)
@@ -123,6 +135,37 @@ def api_refresh():
         elapsed = time.time() - t0
         return jsonify({"status": "refreshed", "source": "onedrive", "elapsed_s": round(elapsed, 2)})
     return jsonify({"status": "skipped", "source": "local", "message": "ローカルモードではmtimeで自動更新されます"})
+
+
+@app.route("/api/fileinfo")
+@login_required
+def api_fileinfo():
+    """取得したファイルの情報を返す（デバッグ用）"""
+    JST = timezone(timedelta(hours=9))
+    if ONEDRIVE_SHARE_URL:
+        from onedrive import get_file_info
+        info = get_file_info()
+        fetched_at = None
+        if info["fetched_at"]:
+            fetched_at = datetime.fromtimestamp(info["fetched_at"], tz=JST).strftime("%Y-%m-%d %H:%M:%S JST")
+        return jsonify({
+            "source": "onedrive",
+            "filename": info["filename"],
+            "fetched_at": fetched_at,
+            "content_length": info["content_length"],
+            "share_url": ONEDRIVE_SHARE_URL[:50] + "...",
+        })
+    else:
+        fname = os.path.basename(XLSM_PATH) if XLSM_PATH else None
+        mtime = None
+        if XLSM_PATH and os.path.exists(XLSM_PATH):
+            mtime = datetime.fromtimestamp(os.path.getmtime(XLSM_PATH), tz=JST).strftime("%Y-%m-%d %H:%M:%S JST")
+        return jsonify({
+            "source": "local",
+            "filename": fname,
+            "last_modified": mtime,
+            "path": XLSM_PATH,
+        })
 
 
 @app.route("/api/headers")
