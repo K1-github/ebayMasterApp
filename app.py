@@ -31,83 +31,104 @@ def _find_xlsm():
     return matches[0] if matches else None
 
 XLSM_PATH = _find_xlsm()
-SHEET_NAME = "仕入・在庫管理表"
-HEADER_ROW = 5
-DATA_START_ROW = 6
-MAX_COL = 28  # A〜AB
 
-# キャッシュ: {rows_data: {行番号: [値リスト]}, headers: [...], mtime, source, max_row}
-_cache = {"rows_data": None, "headers": None, "mtime": None, "source": None, "max_row": 0}
+# シート設定: {シート名: {header_row, data_start, search_col (0=A,1=B), max_col}}
+SHEETS = {
+    "仕入・在庫管理表": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
+    "販売管理表": {"header_row": 5, "data_start": 6, "search_col": 0, "search_label": "レコード番号（A列）", "max_col": 28},
+    "無在庫管理表（中古）": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
+}
+
+# シートごとのキャッシュ
+_cache = {}
+_wb_cache = {"mtime": None, "source": None}
 
 
-def _parse_workbook(wb):
-    """workbook から全行データとヘッダーを抽出してメモリにキャッシュする形式で返す"""
-    ws = wb[SHEET_NAME]
+def _parse_sheet(wb, sheet_name):
+    """指定シートのデータとヘッダーを読み取る"""
+    cfg = SHEETS[sheet_name]
+    ws = wb[sheet_name]
+    header_row = cfg["header_row"]
+    max_col = cfg["max_col"]
 
-    # read_only モードでは iter_rows で最終行まで一括読み込み（max_row 指定なし）
     rows_data = {}
-    max_data_row = HEADER_ROW
-    for row in ws.iter_rows(min_row=HEADER_ROW, max_col=MAX_COL, values_only=False):
+    max_data_row = header_row
+    for row in ws.iter_rows(min_row=header_row, max_col=max_col, values_only=False):
         r = row[0].row
         values = [cell.value for cell in row]
-        # 全セルが空の行はスキップ
         if any(v is not None for v in values):
             rows_data[r] = values
             max_data_row = r
 
-    # ヘッダー構築
-    header_values = rows_data.get(HEADER_ROW, [None] * MAX_COL)
+    header_values = rows_data.get(header_row, [None] * max_col)
     headers = []
-    for col in range(MAX_COL):
+    for col in range(max_col):
         col_letter = openpyxl.utils.get_column_letter(col + 1)
         val = header_values[col] if col < len(header_values) else None
         headers.append({"col": col + 1, "letter": col_letter, "name": val or f"({col_letter})"})
 
+    return {"rows_data": rows_data, "headers": headers, "max_row": max_data_row}
+
+
+def _load_all_sheets(wb):
+    """全シートを読み込んでキャッシュに格納"""
+    for sheet_name in SHEETS:
+        if sheet_name in wb.sheetnames:
+            _cache[sheet_name] = _parse_sheet(wb, sheet_name)
     wb.close()
-    return rows_data, headers, max_data_row
 
 
-def get_data():
-    """行データとヘッダーを返す（キャッシュ付き）"""
+def get_sheet_data(sheet_name):
+    """指定シートのデータを返す（キャッシュ付き）"""
     if ONEDRIVE_SHARE_URL:
-        return _get_data_onedrive()
-    return _get_data_local()
+        return _get_data_onedrive(sheet_name)
+    return _get_data_local(sheet_name)
 
 
-def _get_data_onedrive():
-    """OneDrive 版: read_only + メモリキャッシュ"""
+def _get_data_onedrive(sheet_name):
     from onedrive import fetch_xlsm, _is_cache_fresh
 
-    if _cache["source"] == "onedrive" and _cache["rows_data"] is not None and _is_cache_fresh():
-        return _cache["rows_data"], _cache["headers"]
+    if _wb_cache["source"] == "onedrive" and sheet_name in _cache and _is_cache_fresh():
+        c = _cache[sheet_name]
+        return c["rows_data"], c["headers"], c["max_row"]
 
     buf = fetch_xlsm(ONEDRIVE_SHARE_URL)
     wb = openpyxl.load_workbook(buf, data_only=True, keep_vba=False, read_only=True)
-    rows_data, headers, max_row = _parse_workbook(wb)
-    _cache.update(rows_data=rows_data, headers=headers, mtime=None, source="onedrive", max_row=max_row)
-    return rows_data, headers
+    _load_all_sheets(wb)
+    _wb_cache.update(mtime=None, source="onedrive")
+    c = _cache[sheet_name]
+    return c["rows_data"], c["headers"], c["max_row"]
 
 
 def _refresh_onedrive():
-    """OneDrive キャッシュを強制クリアして再取得"""
     from onedrive import invalidate_cache
     invalidate_cache()
-    _cache.update(rows_data=None, headers=None, mtime=None, source=None)
+    _cache.clear()
+    _wb_cache.update(mtime=None, source=None)
 
 
-def _get_data_local():
-    """ローカルファイル版: mtime ベースのキャッシュ"""
+def _get_data_local(sheet_name):
     global XLSM_PATH
     if not XLSM_PATH:
         XLSM_PATH = _find_xlsm()
     if not XLSM_PATH:
         raise FileNotFoundError("ebayマスタ*.xlsm が見つかりません")
     mtime = os.path.getmtime(XLSM_PATH)
-    if _cache["mtime"] != mtime or _cache["source"] != "local":
+    if _wb_cache["mtime"] != mtime or _wb_cache["source"] != "local":
         wb = openpyxl.load_workbook(XLSM_PATH, data_only=True, keep_vba=False, read_only=True)
-        rows_data, headers, max_row = _parse_workbook(wb)
-        _cache.update(rows_data=rows_data, headers=headers, mtime=mtime, source="local", max_row=max_row)
-    return _cache["rows_data"], _cache["headers"]
+        _load_all_sheets(wb)
+        _wb_cache.update(mtime=mtime, source="local")
+    c = _cache[sheet_name]
+    return c["rows_data"], c["headers"], c["max_row"]
+
+
+def _to_str(val):
+    """セル値を検索用文字列に変換"""
+    if val is None:
+        return None
+    if isinstance(val, float) and val == int(val):
+        return str(int(val))
+    return str(val)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -131,11 +152,11 @@ def index():
 @app.route("/api/refresh", methods=["POST"])
 @login_required
 def api_refresh():
-    """キャッシュをクリアして最新データを再取得する"""
     if ONEDRIVE_SHARE_URL:
         _refresh_onedrive()
         t0 = time.time()
-        get_data()
+        # 全シート読み込み
+        get_sheet_data(list(SHEETS.keys())[0])
         elapsed = time.time() - t0
         return jsonify({"status": "refreshed", "source": "onedrive", "elapsed_s": round(elapsed, 2)})
     return jsonify({"status": "skipped", "source": "local", "message": "ローカルモードではmtimeで自動更新されます"})
@@ -144,7 +165,6 @@ def api_refresh():
 @app.route("/api/fileinfo")
 @login_required
 def api_fileinfo():
-    """取得したファイルの情報を返す（デバッグ用）"""
     JST = timezone(timedelta(hours=9))
     if ONEDRIVE_SHARE_URL:
         from onedrive import get_file_info
@@ -158,125 +178,69 @@ def api_fileinfo():
             "fetched_at": fetched_at,
             "content_length": info["content_length"],
             "content_type": info.get("content_type"),
-            "final_url": info.get("final_url", "")[:100] + "...",
             "status_code": info.get("status_code"),
-            "share_url": ONEDRIVE_SHARE_URL[:50] + "...",
         })
     else:
         fname = os.path.basename(XLSM_PATH) if XLSM_PATH else None
         mtime = None
         if XLSM_PATH and os.path.exists(XLSM_PATH):
             mtime = datetime.fromtimestamp(os.path.getmtime(XLSM_PATH), tz=JST).strftime("%Y-%m-%d %H:%M:%S JST")
-        return jsonify({
-            "source": "local",
-            "filename": fname,
-            "last_modified": mtime,
-            "path": XLSM_PATH,
-        })
-
-
-@app.route("/api/headers")
-@login_required
-def api_headers():
-    _, headers = get_data()
-    return jsonify(headers)
-
-
-@app.route("/api/cell")
-@login_required
-def get_cell():
-    try:
-        col = int(request.args.get("col", 1))
-        row = int(request.args.get("row", DATA_START_ROW))
-    except (TypeError, ValueError):
-        return jsonify({"error": "col と row は整数で指定してください"}), 400
-
-    if col < 1 or col > MAX_COL:
-        return jsonify({"error": f"col は 1〜{MAX_COL} の範囲で指定してください"}), 400
-    rows_data, headers = get_data()
-    max_row = _cache["max_row"]
-    if row < DATA_START_ROW or row > max_row:
-        return jsonify({"error": f"row は {DATA_START_ROW}〜{max_row} の範囲で指定してください"}), 400
-    row_values = rows_data.get(row)
-    value = row_values[col - 1] if row_values and col - 1 < len(row_values) else None
-    return jsonify({
-        "col": col,
-        "row": row,
-        "header": headers[col - 1]["name"],
-        "value": str(value) if value is not None else None,
-    })
+        return jsonify({"source": "local", "filename": fname, "last_modified": mtime})
 
 
 @app.route("/api/search")
 @login_required
 def api_search():
-    """出品管理ID（B列）で行を検索し、該当行の全データを返す"""
+    """指定シートの指定列で検索"""
+    sheet = request.args.get("sheet", "").strip()
     query = request.args.get("q", "").strip()
+
+    if sheet not in SHEETS:
+        return jsonify({"error": "無効なシート名です"}), 400
     if not query:
         return jsonify({"error": "検索IDを入力してください"}), 400
 
-    rows_data, headers = get_data()
+    cfg = SHEETS[sheet]
+    search_col = cfg["search_col"]
+    data_start = cfg["data_start"]
+    max_col = cfg["max_col"]
+
+    rows_data, headers, max_row = get_sheet_data(sheet)
 
     matched = []
-    for r in range(DATA_START_ROW, _cache["max_row"] + 1):
+    for r in range(data_start, max_row + 1):
         row_values = rows_data.get(r)
         if not row_values:
             continue
-        b_val = row_values[1]  # B列 = index 1
-        if b_val is None:
-            continue
-        # 数値の場合 12345.0 → "12345" に変換
-        b_str = str(int(b_val)) if isinstance(b_val, float) and b_val == int(b_val) else str(b_val)
-        if query in b_str.strip():
+        val = row_values[search_col] if search_col < len(row_values) else None
+        val_str = _to_str(val)
+        if val_str is not None and query in val_str.strip():
             row_data = {}
-            for col in range(MAX_COL):
-                val = row_values[col] if col < len(row_values) else None
-                row_data[headers[col]["letter"]] = str(val) if val is not None else None
+            for col in range(max_col):
+                v = row_values[col] if col < len(row_values) else None
+                row_data[headers[col]["letter"]] = str(v) if v is not None else None
             matched.append({"row": r, "data": row_data})
 
     return jsonify({
         "query": query,
+        "sheet": sheet,
         "count": len(matched),
         "headers": headers,
         "rows": matched,
     })
 
 
-@app.route("/api/range")
+@app.route("/api/sheets")
 @login_required
-def get_range():
-    try:
-        row_start = int(request.args.get("row_start", DATA_START_ROW))
-        row_end = int(request.args.get("row_end", DATA_START_ROW + 19))
-    except (TypeError, ValueError):
-        return jsonify({"error": "row_start と row_end は整数で指定してください"}), 400
-
-    row_start = max(row_start, DATA_START_ROW)
-    rows_data, headers = get_data()
-    row_end = min(row_end, _cache["max_row"])
-
-    if row_end - row_start > 100:
-        row_end = row_start + 100
-
-    rows = []
-    for r in range(row_start, row_end + 1):
-        row_data = {}
-        row_values = rows_data.get(r)
-        for col in range(MAX_COL):
-            val = row_values[col] if row_values and col < len(row_values) else None
-            row_data[headers[col]["letter"]] = str(val) if val is not None else None
-        rows.append({"row": r, "data": row_data})
-
-    return jsonify({
-        "row_start": row_start,
-        "row_end": row_end,
-        "headers": headers,
-        "rows": rows,
-    })
+def api_sheets():
+    """利用可能なシート一覧を返す"""
+    result = []
+    for name, cfg in SHEETS.items():
+        result.append({"name": name, "search_label": cfg["search_label"]})
+    return jsonify(result)
 
 
 if __name__ == "__main__":
     source = "OneDrive" if ONEDRIVE_SHARE_URL else f"Local ({XLSM_PATH})"
     print(f"Source: {source}")
-    print(f"Sheet: {SHEET_NAME}")
     app.run(debug=True, host="0.0.0.0", port=5000)
