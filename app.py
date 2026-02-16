@@ -34,22 +34,26 @@ XLSM_PATH = _find_xlsm()
 SHEET_NAME = "仕入・在庫管理表"
 HEADER_ROW = 5
 DATA_START_ROW = 6
-DATA_END_ROW = 4847
 MAX_COL = 28  # A〜AB
 
-# キャッシュ: {rows_data: {行番号: [値リスト]}, headers: [...], mtime, source}
-_cache = {"rows_data": None, "headers": None, "mtime": None, "source": None}
+# キャッシュ: {rows_data: {行番号: [値リスト]}, headers: [...], mtime, source, max_row}
+_cache = {"rows_data": None, "headers": None, "mtime": None, "source": None, "max_row": 0}
 
 
 def _parse_workbook(wb):
     """workbook から全行データとヘッダーを抽出してメモリにキャッシュする形式で返す"""
     ws = wb[SHEET_NAME]
 
-    # read_only モードでは iter_rows で一括読み込みが最速
+    # read_only モードでは iter_rows で最終行まで一括読み込み（max_row 指定なし）
     rows_data = {}
-    for row in ws.iter_rows(min_row=HEADER_ROW, max_row=DATA_END_ROW, max_col=MAX_COL, values_only=False):
+    max_data_row = HEADER_ROW
+    for row in ws.iter_rows(min_row=HEADER_ROW, max_col=MAX_COL, values_only=False):
         r = row[0].row
-        rows_data[r] = [cell.value for cell in row]
+        values = [cell.value for cell in row]
+        # 全セルが空の行はスキップ
+        if any(v is not None for v in values):
+            rows_data[r] = values
+            max_data_row = r
 
     # ヘッダー構築
     header_values = rows_data.get(HEADER_ROW, [None] * MAX_COL)
@@ -60,7 +64,7 @@ def _parse_workbook(wb):
         headers.append({"col": col + 1, "letter": col_letter, "name": val or f"({col_letter})"})
 
     wb.close()
-    return rows_data, headers
+    return rows_data, headers, max_data_row
 
 
 def get_data():
@@ -79,8 +83,8 @@ def _get_data_onedrive():
 
     buf = fetch_xlsm(ONEDRIVE_SHARE_URL)
     wb = openpyxl.load_workbook(buf, data_only=True, keep_vba=False, read_only=True)
-    rows_data, headers = _parse_workbook(wb)
-    _cache.update(rows_data=rows_data, headers=headers, mtime=None, source="onedrive")
+    rows_data, headers, max_row = _parse_workbook(wb)
+    _cache.update(rows_data=rows_data, headers=headers, mtime=None, source="onedrive", max_row=max_row)
     return rows_data, headers
 
 
@@ -101,8 +105,8 @@ def _get_data_local():
     mtime = os.path.getmtime(XLSM_PATH)
     if _cache["mtime"] != mtime or _cache["source"] != "local":
         wb = openpyxl.load_workbook(XLSM_PATH, data_only=True, keep_vba=False, read_only=True)
-        rows_data, headers = _parse_workbook(wb)
-        _cache.update(rows_data=rows_data, headers=headers, mtime=mtime, source="local")
+        rows_data, headers, max_row = _parse_workbook(wb)
+        _cache.update(rows_data=rows_data, headers=headers, mtime=mtime, source="local", max_row=max_row)
     return _cache["rows_data"], _cache["headers"]
 
 
@@ -189,10 +193,10 @@ def get_cell():
 
     if col < 1 or col > MAX_COL:
         return jsonify({"error": f"col は 1〜{MAX_COL} の範囲で指定してください"}), 400
-    if row < DATA_START_ROW or row > DATA_END_ROW:
-        return jsonify({"error": f"row は {DATA_START_ROW}〜{DATA_END_ROW} の範囲で指定してください"}), 400
-
     rows_data, headers = get_data()
+    max_row = _cache["max_row"]
+    if row < DATA_START_ROW or row > max_row:
+        return jsonify({"error": f"row は {DATA_START_ROW}〜{max_row} の範囲で指定してください"}), 400
     row_values = rows_data.get(row)
     value = row_values[col - 1] if row_values and col - 1 < len(row_values) else None
     return jsonify({
@@ -214,7 +218,7 @@ def api_search():
     rows_data, headers = get_data()
 
     matched = []
-    for r in range(DATA_START_ROW, DATA_END_ROW + 1):
+    for r in range(DATA_START_ROW, _cache["max_row"] + 1):
         row_values = rows_data.get(r)
         if not row_values:
             continue
@@ -248,12 +252,11 @@ def get_range():
         return jsonify({"error": "row_start と row_end は整数で指定してください"}), 400
 
     row_start = max(row_start, DATA_START_ROW)
-    row_end = min(row_end, DATA_END_ROW)
+    rows_data, headers = get_data()
+    row_end = min(row_end, _cache["max_row"])
 
     if row_end - row_start > 100:
         row_end = row_start + 100
-
-    rows_data, headers = get_data()
 
     rows = []
     for r in range(row_start, row_end + 1):
