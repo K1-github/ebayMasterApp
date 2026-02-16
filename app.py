@@ -153,6 +153,9 @@ def api_fileinfo():
             "filename": info["filename"],
             "fetched_at": fetched_at,
             "content_length": info["content_length"],
+            "content_type": info.get("content_type"),
+            "final_url": info.get("final_url", "")[:100] + "...",
+            "status_code": info.get("status_code"),
             "share_url": ONEDRIVE_SHARE_URL[:50] + "...",
         })
     else:

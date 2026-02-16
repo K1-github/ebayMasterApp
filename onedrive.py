@@ -60,8 +60,15 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
         if m:
             filename = m.group(1)
 
+    content_type = resp.headers.get("Content-Type", "")
+    final_url = resp.url
+
     buf = io.BytesIO(resp.content)
-    _cache.update(data=buf, fetched_at=time.time(), filename=filename, content_length=len(resp.content))
+    _cache.update(
+        data=buf, fetched_at=time.time(), filename=filename,
+        content_length=len(resp.content), content_type=content_type,
+        final_url=final_url, status_code=resp.status_code,
+    )
     buf.seek(0)
     return buf
 
@@ -71,7 +78,10 @@ def get_file_info() -> dict:
     if _cache["data"] is None:
         return {"filename": None, "fetched_at": None, "content_length": None}
     return {
-        "filename": _cache["filename"],
-        "fetched_at": _cache["fetched_at"],
-        "content_length": _cache["content_length"],
+        "filename": _cache.get("filename"),
+        "fetched_at": _cache.get("fetched_at"),
+        "content_length": _cache.get("content_length"),
+        "content_type": _cache.get("content_type"),
+        "final_url": _cache.get("final_url"),
+        "status_code": _cache.get("status_code"),
     }

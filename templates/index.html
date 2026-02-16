@@ -86,7 +86,7 @@ fetch("/api/fileinfo")
   .then(info => {
     const el = document.getElementById("file-info");
     if (info.source === "onedrive") {
-      el.innerHTML = `<b>ソース:</b> OneDrive | <b>ファイル名:</b> ${info.filename || "不明"} | <b>取得日時:</b> ${info.fetched_at || "未取得"} | <b>サイズ:</b> ${info.content_length ? (info.content_length / 1024 / 1024).toFixed(1) + " MB" : "不明"}`;
+      el.innerHTML = `<b>ソース:</b> OneDrive | <b>ファイル名:</b> ${info.filename || "不明"} | <b>取得日時:</b> ${info.fetched_at || "未取得"} | <b>サイズ:</b> ${info.content_length ? (info.content_length / 1024 / 1024).toFixed(1) + " MB" : "不明"}<br><b>Content-Type:</b> ${info.content_type || "不明"} | <b>Status:</b> ${info.status_code || "不明"}`;
     } else {
       el.innerHTML = `<b>ソース:</b> ローカル | <b>ファイル名:</b> ${info.filename || "不明"} | <b>最終更新:</b> ${info.last_modified || "不明"}`;
     }
