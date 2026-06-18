@@ -231,10 +231,14 @@ def api_fileinfo():
         fetched_at = None
         if info["fetched_at"]:
             fetched_at = datetime.fromtimestamp(info["fetched_at"], tz=JST).strftime("%Y-%m-%d %H:%M:%S JST")
+        last_modified = None
+        if info.get("last_modified"):
+            last_modified = datetime.fromtimestamp(info["last_modified"], tz=JST).strftime("%Y-%m-%d %H:%M:%S JST")
         return jsonify({
             "source": "onedrive",
             "filename": info["filename"],
             "fetched_at": fetched_at,
+            "last_modified": last_modified,
             "content_length": info["content_length"],
             "content_type": info.get("content_type"),
             "status_code": info.get("status_code"),

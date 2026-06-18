@@ -253,8 +253,8 @@ function updateFileInfo() {
       const parts = [];
       if (info.source === "onedrive") {
         if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);
-        const ago = timeAgo(info.fetched_at);
-        if (ago) parts.push(`<b>取得:</b> ${ago}`);
+        const updated = timeAgo(info.last_modified);
+        if (updated) parts.push(`<b>データ更新:</b> ${updated}`);
         if (info.content_length) parts.push(`<b>サイズ:</b> ${(info.content_length/1024/1024).toFixed(1)} MB`);
       } else {
         if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);

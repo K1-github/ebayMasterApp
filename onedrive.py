@@ -107,11 +107,22 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
 
     final_url = resp.url
 
+    # OneDrive上のファイル更新時刻（Last-Modified ヘッダー）をunix時刻で取得
+    last_modified = None
+    lm = resp.headers.get("Last-Modified")
+    if lm:
+        try:
+            from email.utils import parsedate_to_datetime
+            last_modified = parsedate_to_datetime(lm).timestamp()
+        except Exception:
+            last_modified = None
+
     buf = io.BytesIO(resp.content)
     _cache.update(
         data=buf, fetched_at=time.time(), filename=filename,
         content_length=len(resp.content), content_type=content_type,
         final_url=final_url, status_code=resp.status_code,
+        last_modified=last_modified,
     )
     buf.seek(0)
     return buf
@@ -124,6 +135,7 @@ def get_file_info() -> dict:
     return {
         "filename": _cache.get("filename"),
         "fetched_at": _cache.get("fetched_at"),
+        "last_modified": _cache.get("last_modified"),
         "content_length": _cache.get("content_length"),
         "content_type": _cache.get("content_type"),
         "final_url": _cache.get("final_url"),
