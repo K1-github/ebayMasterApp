@@ -3,43 +3,239 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>xlsm データビューア</title>
+<title>ebayマスタビューア</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Segoe UI", "Meiryo", sans-serif; background: #f5f7fa; color: #333; padding: 20px; }
-  h1 { margin-bottom: 20px; font-size: 1.4rem; }
-  .panel { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  .panel h2 { font-size: 1.1rem; margin-bottom: 12px; color: #555; }
-  label { font-weight: 600; margin-right: 6px; }
-  input[type="text"] { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; width: 200px; }
-  button { padding: 6px 16px; border: none; border-radius: 4px; background: #4a90d9; color: #fff; font-size: 0.95rem; cursor: pointer; margin-left: 8px; }
-  button:hover { background: #357abd; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; white-space: nowrap; }
-  th { background: #e8ecf1; position: sticky; top: 0; }
-  .table-wrap { max-height: 500px; overflow: auto; }
-  .error { color: #d9534f; }
-  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .count { margin-top: 8px; font-size: 0.9rem; color: #555; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f0f2f5;
+    --surface: #ffffff;
+    --border: #e2e6ea;
+    --accent: #2563eb;
+    --accent-dark: #1d4ed8;
+    --accent-light: #eff6ff;
+    --text: #111827;
+    --text-muted: #6b7280;
+    --success: #16a34a;
+    --error: #dc2626;
+    --radius: 12px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
+  }
+
+  body {
+    font-family: "Segoe UI", "Hiragino Sans", "Meiryo", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ヘッダー */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  header h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    flex-shrink: 0;
+  }
+  #file-info {
+    flex: 1;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #file-info b { color: var(--text); font-weight: 600; }
+
+  .btn-refresh {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .btn-refresh:hover { background: var(--accent-dark); }
+  .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-refresh svg { width: 14px; height: 14px; }
+
+  #refresh-status {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* メインコンテンツ */
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* カード */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 14px 20px;
+    background: var(--accent-light);
+    border-bottom: 1px solid #dbeafe;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card-header h2 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .card-body { padding: 16px 20px; }
+
+  /* 検索行 */
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-row:last-of-type { border-bottom: none; }
+  .search-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    min-width: 160px;
+  }
+  .search-input {
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    width: 220px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+  }
+  .search-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  }
+  .btn-search {
+    padding: 7px 16px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-search:hover { background: var(--accent-dark); }
+
+  .count-badge {
+    display: inline-block;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 20px;
+    margin-top: 8px;
+  }
+
+  /* テーブル */
+  .table-wrap {
+    margin-top: 10px;
+    max-height: 480px;
+    overflow: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  thead th {
+    background: #f8fafc;
+    border-bottom: 2px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    white-space: nowrap;
+    font-weight: 700;
+    color: var(--text-muted);
+    position: sticky;
+    top: 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  tbody td {
+    border-bottom: 1px solid var(--border);
+    padding: 7px 10px;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody td:first-child { color: var(--text-muted); font-size: 0.75rem; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .error-msg { color: var(--error); font-size: 0.85rem; padding: 8px 0; }
+  .loading { color: var(--text-muted); font-size: 0.85rem; padding: 8px 0; }
+
+  @media (max-width: 600px) {
+    header { padding: 0 12px; }
+    main { padding: 12px; }
+    .search-input { width: 160px; }
+    .search-label { min-width: unset; }
+  }
 </style>
 </head>
 <body>
 
-<div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
-  <h1 style="margin-bottom:0;">xlsm データビューア</h1>
-  <button id="btn-refresh" style="background:#27ae60;">&#x21bb; 最新データ取得</button>
-  <span id="refresh-status" style="font-size:0.85rem; color:#888;"></span>
-</div>
-<div id="file-info" style="margin-bottom:16px; padding:10px 14px; background:#e8ecf1; border-radius:6px; font-size:0.85rem; color:#555;"></div>
+<header>
+  <h1>ebayマスタビューア</h1>
+  <div id="file-info"></div>
+  <button class="btn-refresh" id="btn-refresh">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 8a7 7 0 1 0 2-4.9"/>
+      <path d="M1 3v5h5"/>
+    </svg>
+    最新データ取得
+  </button>
+  <span id="refresh-status"></span>
+</header>
 
-<div id="search-panels"></div>
+<main>
+  <div id="search-panels"></div>
+</main>
 
 <script>
 function timeAgo(jstDateStr) {
-  if (!jstDateStr) return "未取得";
-  // "2026-06-18 12:34:56 JST" → parse as JST
+  if (!jstDateStr) return null;
   const m = jstDateStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
-  if (!m) return jstDateStr;
+  if (!m) return null;
   const utcMs = Date.UTC(+m[1], +m[2]-1, +m[3], +m[4]-9, +m[5], +m[6]);
   const diffMin = Math.floor((Date.now() - utcMs) / 60000);
   if (diffMin < 1) return "たった今";
@@ -54,145 +250,130 @@ function updateFileInfo() {
     .then(r => r.json())
     .then(info => {
       const el = document.getElementById("file-info");
+      const parts = [];
       if (info.source === "onedrive") {
-        const size = info.content_length ? (info.content_length / 1024 / 1024).toFixed(1) + " MB" : "不明";
-        const parts = [`<b>ソース:</b> OneDrive`];
         if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);
-        parts.push(`<b>取得:</b> ${timeAgo(info.fetched_at)}`);
-        parts.push(`<b>サイズ:</b> ${size}`);
-        el.innerHTML = parts.join(" | ");
+        const ago = timeAgo(info.fetched_at);
+        if (ago) parts.push(`<b>取得:</b> ${ago}`);
+        if (info.content_length) parts.push(`<b>サイズ:</b> ${(info.content_length/1024/1024).toFixed(1)} MB`);
       } else {
-        const parts = [`<b>ソース:</b> ローカル`];
         if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);
-        if (info.last_modified) parts.push(`<b>最終更新:</b> ${timeAgo(info.last_modified)}`);
-        el.innerHTML = parts.join(" | ");
+        const ago = timeAgo(info.last_modified);
+        if (ago) parts.push(`<b>更新:</b> ${ago}`);
       }
+      el.innerHTML = parts.length ? parts.join(" &nbsp;·&nbsp; ") : "";
     })
     .catch(() => {});
 }
 
-// ページ読み込み時にファイル情報取得
 updateFileInfo();
 
-// 更新ボタン
 document.getElementById("btn-refresh").addEventListener("click", () => {
   const status = document.getElementById("refresh-status");
   const btn = document.getElementById("btn-refresh");
   btn.disabled = true;
-  status.textContent = "更新中...";
+  status.textContent = "更新中…";
   fetch("/api/refresh", { method: "POST" })
     .then(r => r.json())
     .then(data => {
       if (data.status === "refreshed") {
-        status.textContent = `OneDrive更新完了！（${data.elapsed_s}秒）`;
+        status.textContent = `完了（${data.elapsed_s}秒）`;
         updateFileInfo();
       } else if (data.status === "skipped") {
-        status.textContent = "ローカルモード（OneDrive未設定）";
+        status.textContent = "ローカルモード";
       } else if (data.status === "error") {
         status.textContent = `エラー: ${data.error}`;
-      } else {
-        status.textContent = `完了 (${data.status})`;
       }
       setTimeout(() => { status.textContent = ""; }, 5000);
     })
-    .catch(e => { status.textContent = "更新失敗: " + e; })
+    .catch(e => { status.textContent = "失敗: " + e; })
     .finally(() => { btn.disabled = false; });
 });
 
-// シート一覧を取得して検索パネルを動的生成（シートごとにグループ化）
+function formatCell(name, v) {
+  if (v === null || v === "") return "";
+  const n = parseFloat(v);
+  if (!isNaN(n)) {
+    if (name && name.includes("利益率")) return (n * 100).toFixed(1) + "%";
+    if (name && (name.includes("利益額") || name.includes("還付金"))) return Math.floor(n).toLocaleString();
+  }
+  return v;
+}
+
 fetch("/api/sheets")
   .then(r => r.json())
   .then(sheets => {
     const container = document.getElementById("search-panels");
-
-    // display_name でグループ化
     const groups = [];
     const groupMap = {};
     sheets.forEach(sheet => {
       const key = sheet.display_name || sheet.name;
-      if (!groupMap[key]) {
-        groupMap[key] = [];
-        groups.push({ key, items: groupMap[key] });
-      }
+      if (!groupMap[key]) { groupMap[key] = []; groups.push({ key, items: groupMap[key] }); }
       groupMap[key].push(sheet);
     });
 
     groups.forEach(group => {
-      const groupDiv = document.createElement("div");
-      groupDiv.style.cssText = "background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);";
-      groupDiv.innerHTML = `<h2 style="font-size:1.1rem;margin-bottom:16px;color:#333;border-bottom:2px solid #4a90d9;padding-bottom:8px;">${group.key}</h2>`;
-      container.appendChild(groupDiv);
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `<div class="card-header"><h2>${group.key}</h2></div><div class="card-body" id="body-${group.key}"></div>`;
+      container.appendChild(card);
+      const body = card.querySelector(".card-body");
 
       group.items.forEach((sheet, idx) => {
-        const uid = `${group.key}-${idx}`;
-        const inputId = `input-${uid}`;
-        const btnId = `btn-${uid}`;
-        const countId = `count-${uid}`;
-        const resultId = `result-${uid}`;
+        const uid = btoa(sheet.name).replace(/[^a-z0-9]/gi, "");
+        const inputId = `i-${uid}`;
+        const btnId = `b-${uid}`;
+        const countId = `c-${uid}`;
+        const resultId = `r-${uid}`;
 
-        const searchDiv = document.createElement("div");
-        searchDiv.style.cssText = "margin-bottom:20px;";
-        searchDiv.innerHTML = `
-          <div class="controls">
-            <label>${sheet.search_label}:</label>
-            <input type="text" id="${inputId}" placeholder="検索値を入力">
-            <button id="${btnId}">検索</button>
-          </div>
-          <div class="count" id="${countId}"></div>
-          <div class="table-wrap" id="${resultId}" style="margin-top:12px;"></div>
+        const row = document.createElement("div");
+        row.className = "search-row";
+        row.innerHTML = `
+          <span class="search-label">${sheet.search_label}</span>
+          <input class="search-input" type="text" id="${inputId}" placeholder="検索値を入力">
+          <button class="btn-search" id="${btnId}">検索</button>
+          <span class="count-badge" id="${countId}" style="display:none;"></span>
         `;
-        groupDiv.appendChild(searchDiv);
+        body.appendChild(row);
 
-      function doSearch() {
-        const q = document.getElementById(inputId).value.trim();
-        const resultEl = document.getElementById(resultId);
-        const countEl = document.getElementById(countId);
-        if (!q) { resultEl.innerHTML = ""; countEl.textContent = ""; return; }
-        resultEl.innerHTML = "検索中...";
-        countEl.textContent = "";
-        fetch(`/api/search?sheet=${encodeURIComponent(sheet.name)}&q=${encodeURIComponent(q)}`)
-          .then(r => {
-            if (!r.ok && r.headers.get("content-type")?.indexOf("json") === -1) {
-              throw new Error(`サーバーエラー (${r.status})`);
-            }
-            return r.json();
-          })
-          .then(data => {
-            if (data.error) {
-              resultEl.innerHTML = `<span class="error">${data.error}</span>`;
-              return;
-            }
-            countEl.textContent = `${data.count} 件見つかりました`;
-            if (data.count === 0) { resultEl.innerHTML = ""; return; }
-            let html = "<table><thead><tr><th>行</th>";
-            data.headers.forEach(h => { html += `<th>${h.letter}: ${h.name}</th>`; });
-            html += "</tr></thead><tbody>";
-            function formatCell(name, v) {
-              if (v === null || v === "") return "";
-              const n = parseFloat(v);
-              if (!isNaN(n)) {
-                if (name && name.includes("利益率")) return (n * 100).toFixed(1) + "%";
-                if (name && (name.includes("利益額") || name.includes("還付金"))) return Math.floor(n).toString();
-              }
-              return v;
-            }
-            data.rows.forEach(row => {
-              html += `<tr><td>${row.row}</td>`;
-              data.headers.forEach(h => {
-                const v = row.data[h.letter];
-                if (v && /^https?:\/\//i.test(v)) {
-                  html += `<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;"><a href="${v}" target="_blank" rel="noopener" title="${v}">${v}</a></td>`;
-                } else {
-                  html += `<td>${formatCell(h.name, v !== null ? v : "")}</td>`;
-                }
+        const resultWrap = document.createElement("div");
+        resultWrap.id = resultId;
+        body.appendChild(resultWrap);
+
+        function doSearch() {
+          const q = document.getElementById(inputId).value.trim();
+          const resultEl = document.getElementById(resultId);
+          const countEl = document.getElementById(countId);
+          if (!q) { resultEl.innerHTML = ""; countEl.style.display = "none"; return; }
+          resultEl.innerHTML = `<p class="loading">検索中…</p>`;
+          countEl.style.display = "none";
+          fetch(`/api/search?sheet=${encodeURIComponent(sheet.name)}&q=${encodeURIComponent(q)}`)
+            .then(r => r.json())
+            .then(data => {
+              if (data.error) { resultEl.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
+              countEl.textContent = `${data.count} 件`;
+              countEl.style.display = "inline-block";
+              if (data.count === 0) { resultEl.innerHTML = ""; return; }
+              let html = `<div class="table-wrap"><table><thead><tr><th>行</th>`;
+              data.headers.forEach(h => { html += `<th>${h.letter}: ${h.name}</th>`; });
+              html += `</tr></thead><tbody>`;
+              data.rows.forEach(row => {
+                html += `<tr><td>${row.row}</td>`;
+                data.headers.forEach(h => {
+                  const v = row.data[h.letter];
+                  if (v && /^https?:\/\//i.test(v)) {
+                    html += `<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;"><a href="${v}" target="_blank" rel="noopener" title="${v}">リンク</a></td>`;
+                  } else {
+                    html += `<td>${formatCell(h.name, v !== null ? v : "")}</td>`;
+                  }
+                });
+                html += `</tr>`;
               });
-              html += "</tr>";
-            });
-            html += "</tbody></table>";
-            resultEl.innerHTML = html;
-          })
-          .catch(err => { resultEl.innerHTML = `<span class="error">通信エラー: ${err}</span>`; });
-      }
+              html += `</tbody></table></div>`;
+              resultEl.innerHTML = html;
+            })
+            .catch(err => { resultEl.innerHTML = `<p class="error-msg">通信エラー: ${err}</p>`; });
+        }
 
         document.getElementById(btnId).addEventListener("click", doSearch);
         document.getElementById(inputId).addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
