@@ -57,7 +57,15 @@ document.getElementById("btn-refresh").addEventListener("click", () => {
   fetch("/api/refresh", { method: "POST" })
     .then(r => r.json())
     .then(data => {
-      status.textContent = `更新完了！（${data.elapsed_s}秒）`;
+      if (data.status === "refreshed") {
+        status.textContent = `OneDrive更新完了！（${data.elapsed_s}秒）`;
+      } else if (data.status === "skipped") {
+        status.textContent = "ローカルモード（OneDrive未設定）";
+      } else if (data.status === "error") {
+        status.textContent = `エラー: ${data.error}`;
+      } else {
+        status.textContent = `完了 (${data.status})`;
+      }
       setTimeout(() => { status.textContent = ""; }, 5000);
     })
     .catch(e => { status.textContent = "更新失敗: " + e; })
