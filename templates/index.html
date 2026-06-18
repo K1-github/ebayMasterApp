@@ -357,11 +357,22 @@ fetch("/api/sheets")
               let html = `<div class="table-wrap"><table><thead><tr><th>行</th>`;
               data.headers.forEach(h => { html += `<th>${h.letter}: ${h.name}</th>`; });
               html += `</tr></thead><tbody>`;
+              // Item ID 列を特定（ebay URL生成用）
+              const itemIdHeader = data.headers.find(h => h.name && /item\s*id/i.test(h.name));
               data.rows.forEach(row => {
                 html += `<tr><td>${row.row}</td>`;
                 data.headers.forEach(h => {
                   const v = row.data[h.letter];
-                  if (v && /^https?:\/\//i.test(v)) {
+                  // ebay URL列: Item IDからリンクを生成
+                  if (h.name && h.name.includes("ebay URL") && itemIdHeader) {
+                    const itemId = row.data[itemIdHeader.letter];
+                    if (itemId) {
+                      const url = `https://www.ebay.com/itm/${itemId}`;
+                      html += `<td><a href="${url}" target="_blank" rel="noopener" title="${url}">リンク</a></td>`;
+                    } else {
+                      html += `<td></td>`;
+                    }
+                  } else if (v && /^https?:\/\//i.test(v)) {
                     html += `<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;"><a href="${v}" target="_blank" rel="noopener" title="${v}">リンク</a></td>`;
                   } else {
                     html += `<td>${formatCell(h.name, v !== null ? v : "")}</td>`;

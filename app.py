@@ -59,97 +59,6 @@ def _col_letter(col_idx):
     return result
 
 
-# tab名 -> {(row, col0): url} のハイパーリンクキャッシュ
-_hyperlinks = {}
-
-
-def _ref_to_rc(ref):
-    """セル参照 'E7' を (row, col0始まり) に変換"""
-    import re as _re
-    m = _re.match(r"([A-Z]+)(\d+)", ref)
-    if not m:
-        return None
-    letters, row = m.group(1), int(m.group(2))
-    col = 0
-    for ch in letters:
-        col = col * 26 + (ord(ch) - 64)
-    return (row, col - 1)
-
-
-def _extract_hyperlinks(path):
-    """xlsm(zip)内部から各シートのハイパーリンクを抽出する"""
-    import zipfile
-    from xml.etree import ElementTree as ET
-
-    result = {}
-    try:
-        with zipfile.ZipFile(path) as z:
-            names = set(z.namelist())
-
-            # シート名 -> r:id
-            wb_xml = ET.fromstring(z.read("xl/workbook.xml"))
-            name_to_rid = {}
-            for el in wb_xml.iter():
-                if el.tag.endswith("}sheet") or el.tag == "sheet":
-                    name = el.get("name")
-                    rid = None
-                    for k, v in el.attrib.items():
-                        if k.endswith("}id") or k == "id":
-                            rid = v
-                    if name and rid:
-                        name_to_rid[name] = rid
-
-            # r:id -> worksheet xml パス
-            rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
-            rid_to_target = {}
-            for rel in rels:
-                rid_to_target[rel.get("Id")] = rel.get("Target")
-
-            for name, rid in name_to_rid.items():
-                target = rid_to_target.get(rid)
-                if not target:
-                    continue
-                sheet_path = target.lstrip("/") if target.startswith("/") else "xl/" + target
-                if sheet_path not in names:
-                    continue
-
-                sxml = ET.fromstring(z.read(sheet_path))
-                hyper = []
-                for el in sxml.iter():
-                    if el.tag.endswith("}hyperlink"):
-                        ref = el.get("ref")
-                        hrid = None
-                        for k, v in el.attrib.items():
-                            if k.endswith("}id"):
-                                hrid = v
-                        if ref and hrid:
-                            hyper.append((ref, hrid))
-                if not hyper:
-                    continue
-
-                base = sheet_path.rsplit("/", 1)[-1]
-                srels_path = sheet_path.rsplit("/", 1)[0] + "/_rels/" + base + ".rels"
-                hrid_to_url = {}
-                if srels_path in names:
-                    srels = ET.fromstring(z.read(srels_path))
-                    for rel in srels:
-                        hrid_to_url[rel.get("Id")] = rel.get("Target")
-
-                cellmap = {}
-                for ref, hrid in hyper:
-                    url = hrid_to_url.get(hrid)
-                    if not url:
-                        continue
-                    rc = _ref_to_rc(ref.split(":")[0])
-                    if rc:
-                        cellmap[rc] = url
-                if cellmap:
-                    result[name] = cellmap
-    except Exception:
-        pass
-    return result
-
-
 def _parse_sheet_from_wb(wb, sheet_name):
     """calamine ワークブックから指定シートをパース"""
     cfg = SHEETS[sheet_name]
@@ -174,12 +83,6 @@ def _parse_sheet_from_wb(wb, sheet_name):
             if r >= data_start:
                 max_data_row = r
 
-    # ハイパーリンクをセル値に上書き（E列などのリンクセル対応）
-    links = _hyperlinks.get(tab, {})
-    for (r, c), url in links.items():
-        if r in rows_data and 0 <= c < max_col:
-            rows_data[r][c] = url
-
     header_values = rows_data.get(header_row, [None] * max_col)
     headers = []
     for col in range(max_col):
@@ -192,18 +95,15 @@ def _parse_sheet_from_wb(wb, sheet_name):
 
 
 def _open_wb(buf_or_path):
-    """calamine でワークブックを開き、ハイパーリンクも抽出する"""
+    """calamine でワークブックを開く"""
     import tempfile
     from python_calamine import CalamineWorkbook
-    global _hyperlinks
     if isinstance(buf_or_path, str):
-        path = buf_or_path
-    else:
-        buf_or_path.seek(0)
-        with tempfile.NamedTemporaryFile(suffix=".xlsm", delete=False) as tmp:
-            tmp.write(buf_or_path.read())
-            path = tmp.name
-    _hyperlinks = _extract_hyperlinks(path)
+        return CalamineWorkbook.from_path(buf_or_path)
+    buf_or_path.seek(0)
+    with tempfile.NamedTemporaryFile(suffix=".xlsm", delete=False) as tmp:
+        tmp.write(buf_or_path.read())
+        path = tmp.name
     return CalamineWorkbook.from_path(path)
 
 
