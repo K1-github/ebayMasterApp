@@ -14,11 +14,5 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel
 
-      - name: Set Vercel env var and deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          ONEDRIVE_SHARE_URL: ${{ secrets.ONEDRIVE_SHARE_URL }}
-        run: |
-          vercel env rm ONEDRIVE_SHARE_URL production --token=$VERCEL_TOKEN --yes 2>/dev/null || true
-          echo "$ONEDRIVE_SHARE_URL" | vercel env add ONEDRIVE_SHARE_URL production --token=$VERCEL_TOKEN
-          vercel deploy --prod --token=$VERCEL_TOKEN --yes --name=ebay-xlsm-viewer
+      - name: Deploy to Vercel
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes --name=ebay-xlsm-viewer
