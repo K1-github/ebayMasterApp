@@ -96,11 +96,15 @@ def _parse_sheet_from_wb(wb, sheet_name):
 
 def _open_wb(buf_or_path):
     """calamine でワークブックを開く"""
+    import tempfile
     from python_calamine import CalamineWorkbook
     if isinstance(buf_or_path, str):
         return CalamineWorkbook.from_path(buf_or_path)
     buf_or_path.seek(0)
-    return CalamineWorkbook.from_fileobj(buf_or_path)
+    with tempfile.NamedTemporaryFile(suffix=".xlsm", delete=False) as tmp:
+        tmp.write(buf_or_path.read())
+        tmp_path = tmp.name
+    return CalamineWorkbook.from_path(tmp_path)
 
 
 def _load_all_sheets(wb):
