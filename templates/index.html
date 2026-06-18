@@ -320,7 +320,7 @@ fetch("/api/sheets")
       const body = card.querySelector(".card-body");
 
       group.items.forEach((sheet, idx) => {
-        const uid = btoa(sheet.name).replace(/[^a-z0-9]/gi, "");
+        const uid = "s" + Math.random().toString(36).slice(2, 10);
         const inputId = `i-${uid}`;
         const btnId = `b-${uid}`;
         const countId = `c-${uid}`;
