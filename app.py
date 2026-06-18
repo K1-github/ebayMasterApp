@@ -41,6 +41,7 @@ SHEETS = {
     "販売管理表_出品管理ID": {"sheet_tab": "販売管理表", "header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "無在庫管理表(中古)": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "出品管理表": {"header_row": 6, "data_start": 7, "search_col": 2, "search_label": "出品管理ID（C列）", "max_col": 28},
+    "DDP": {"header_row": 5, "data_start": 6, "search_col": 2, "search_label": "出品管理ID（C列）", "max_col": 28},
 }
 
 # シートごとのパース済みキャッシュ
