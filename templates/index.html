@@ -35,18 +35,37 @@
 <div id="search-panels"></div>
 
 <script>
+function timeAgo(jstDateStr) {
+  if (!jstDateStr) return "未取得";
+  // "2026-06-18 12:34:56 JST" → parse as JST
+  const m = jstDateStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return jstDateStr;
+  const utcMs = Date.UTC(+m[1], +m[2]-1, +m[3], +m[4]-9, +m[5], +m[6]);
+  const diffMin = Math.floor((Date.now() - utcMs) / 60000);
+  if (diffMin < 1) return "たった今";
+  if (diffMin < 60) return `${diffMin}分前`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}時間前`;
+  return `${Math.floor(diffH / 24)}日前`;
+}
+
 function updateFileInfo() {
-  fetch("/api/fileinfo")
+  fetch("/api/fileinfo?_=" + Date.now())
     .then(r => r.json())
     .then(info => {
       const el = document.getElementById("file-info");
       if (info.source === "onedrive") {
-        const filename = info.filename || "不明";
-        const fetched = info.fetched_at || "未取得";
         const size = info.content_length ? (info.content_length / 1024 / 1024).toFixed(1) + " MB" : "不明";
-        el.innerHTML = `<b>ソース:</b> OneDrive | <b>ファイル名:</b> ${filename} | <b>取得日時:</b> ${fetched} | <b>サイズ:</b> ${size}`;
+        const parts = [`<b>ソース:</b> OneDrive`];
+        if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);
+        parts.push(`<b>取得:</b> ${timeAgo(info.fetched_at)}`);
+        parts.push(`<b>サイズ:</b> ${size}`);
+        el.innerHTML = parts.join(" | ");
       } else {
-        el.innerHTML = `<b>ソース:</b> ローカル | <b>ファイル名:</b> ${info.filename || "不明"} | <b>最終更新:</b> ${info.last_modified || "不明"}`;
+        const parts = [`<b>ソース:</b> ローカル`];
+        if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);
+        if (info.last_modified) parts.push(`<b>最終更新:</b> ${timeAgo(info.last_modified)}`);
+        el.innerHTML = parts.join(" | ");
       }
     })
     .catch(() => {});
