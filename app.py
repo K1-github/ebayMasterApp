@@ -8,7 +8,9 @@ import time
 
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+# Vercel上では環境変数はVercelダッシュボードで管理するため.envを読まない
+if not os.environ.get("VERCEL"):
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
