@@ -221,7 +221,12 @@ def api_refresh():
 def api_fileinfo():
     JST = timezone(timedelta(hours=9))
     if ONEDRIVE_SHARE_URL:
-        from onedrive import get_file_info
+        from onedrive import get_file_info, fetch_xlsm, _is_cache_fresh
+        if not _is_cache_fresh():
+            try:
+                fetch_xlsm(ONEDRIVE_SHARE_URL)
+            except Exception:
+                pass
         info = get_file_info()
         fetched_at = None
         if info["fetched_at"]:

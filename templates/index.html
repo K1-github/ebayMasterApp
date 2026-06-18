@@ -35,18 +35,25 @@
 <div id="search-panels"></div>
 
 <script>
-// ファイル情報取得
-fetch("/api/fileinfo")
-  .then(r => r.json())
-  .then(info => {
-    const el = document.getElementById("file-info");
-    if (info.source === "onedrive") {
-      el.innerHTML = `<b>ソース:</b> OneDrive | <b>ファイル名:</b> ${info.filename || "不明"} | <b>取得日時:</b> ${info.fetched_at || "未取得"} | <b>サイズ:</b> ${info.content_length ? (info.content_length / 1024 / 1024).toFixed(1) + " MB" : "不明"}`;
-    } else {
-      el.innerHTML = `<b>ソース:</b> ローカル | <b>ファイル名:</b> ${info.filename || "不明"} | <b>最終更新:</b> ${info.last_modified || "不明"}`;
-    }
-  })
-  .catch(() => {});
+function updateFileInfo() {
+  fetch("/api/fileinfo")
+    .then(r => r.json())
+    .then(info => {
+      const el = document.getElementById("file-info");
+      if (info.source === "onedrive") {
+        const filename = info.filename || "不明";
+        const fetched = info.fetched_at || "未取得";
+        const size = info.content_length ? (info.content_length / 1024 / 1024).toFixed(1) + " MB" : "不明";
+        el.innerHTML = `<b>ソース:</b> OneDrive | <b>ファイル名:</b> ${filename} | <b>取得日時:</b> ${fetched} | <b>サイズ:</b> ${size}`;
+      } else {
+        el.innerHTML = `<b>ソース:</b> ローカル | <b>ファイル名:</b> ${info.filename || "不明"} | <b>最終更新:</b> ${info.last_modified || "不明"}`;
+      }
+    })
+    .catch(() => {});
+}
+
+// ページ読み込み時にファイル情報取得
+updateFileInfo();
 
 // 更新ボタン
 document.getElementById("btn-refresh").addEventListener("click", () => {
@@ -59,6 +66,7 @@ document.getElementById("btn-refresh").addEventListener("click", () => {
     .then(data => {
       if (data.status === "refreshed") {
         status.textContent = `OneDrive更新完了！（${data.elapsed_s}秒）`;
+        updateFileInfo();
       } else if (data.status === "skipped") {
         status.textContent = "ローカルモード（OneDrive未設定）";
       } else if (data.status === "error") {
