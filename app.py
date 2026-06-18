@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from datetime import datetime, timezone, timedelta
 from functools import wraps
 import glob
-import openpyxl
 import os
 import time
 
@@ -27,6 +26,7 @@ def login_required(f):
     return decorated
 
 ONEDRIVE_SHARE_URL = os.environ.get("ONEDRIVE_SHARE_URL", "").strip()
+
 def _find_xlsm():
     pattern = os.path.join(os.path.dirname(__file__), "..", "ebayマスタ*.xlsm")
     matches = glob.glob(pattern)
@@ -34,7 +34,7 @@ def _find_xlsm():
 
 XLSM_PATH = _find_xlsm()
 
-# シート設定: {シート名: {header_row, data_start, search_col (0=A,1=B), max_col}}
+# シート設定: {キー: {sheet_tab, header_row, data_start, search_col (0=A,1=B,...), max_col}}
 SHEETS = {
     "仕入・在庫管理表": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "販売管理表": {"header_row": 5, "data_start": 6, "search_col": 0, "search_label": "レコード番号（A列）", "max_col": 28},
@@ -43,53 +43,76 @@ SHEETS = {
     "出品管理表": {"header_row": 6, "data_start": 7, "search_col": 2, "search_label": "出品管理ID（C列）", "max_col": 28},
 }
 
-# シートごとのキャッシュ
+# シートごとのパース済みキャッシュ
 _cache = {}
-_wb_cache = {"mtime": None, "source": None}
+# ファイルレベルのキャッシュ状態
+_wb_cache = {"mtime": None, "source": None, "file_ready": False}
 
 
-def _parse_sheet(wb, sheet_name):
-    """指定シートのデータとヘッダーを読み取る"""
+def _col_letter(col_idx):
+    """0始まりの列インデックスをExcel列名に変換"""
+    n = col_idx + 1
+    result = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        result = chr(65 + r) + result
+    return result
+
+
+def _parse_sheet_from_wb(wb, sheet_name):
+    """calamine ワークブックから指定シートをパース"""
     cfg = SHEETS[sheet_name]
-    ws = wb[cfg.get("sheet_tab", sheet_name)]
+    tab = cfg.get("sheet_tab", sheet_name)
     header_row = cfg["header_row"]
     max_col = cfg["max_col"]
+    data_start = cfg["data_start"]
+
+    sheet = wb.get_sheet_by_name(tab)
+    all_rows = sheet.to_python(skip_empty_area=False)
 
     rows_data = {}
     max_data_row = header_row
-    current_row = header_row
-    for row in ws.iter_rows(min_row=header_row, max_col=max_col, values_only=False):
-        # read_only モードでは EmptyCell が返る場合があるので row 属性を安全に取得
-        r = getattr(row[0], 'row', None) if row[0] is not None else None
-        if r is None:
-            r = current_row
-        current_row = r + 1
-        values = [cell.value for cell in row]
+
+    for i, row_values in enumerate(all_rows):
+        r = i + 1
+        if r < header_row:
+            continue
+        values = list(row_values[:max_col]) + [None] * max(0, max_col - len(row_values))
         if any(v is not None for v in values):
             rows_data[r] = values
-            max_data_row = r
+            if r >= data_start:
+                max_data_row = r
 
     header_values = rows_data.get(header_row, [None] * max_col)
     headers = []
     for col in range(max_col):
-        col_letter = openpyxl.utils.get_column_letter(col + 1)
+        letter = _col_letter(col)
         val = header_values[col] if col < len(header_values) else None
-        headers.append({"col": col + 1, "letter": col_letter, "name": val or f"({col_letter})"})
+        name = str(val) if val is not None else f"({letter})"
+        headers.append({"col": col + 1, "letter": letter, "name": name})
 
     return {"rows_data": rows_data, "headers": headers, "max_row": max_data_row}
 
 
+def _open_wb(buf_or_path):
+    """calamine でワークブックを開く"""
+    from python_calamine import CalamineWorkbook
+    if isinstance(buf_or_path, str):
+        return CalamineWorkbook.from_path(buf_or_path)
+    buf_or_path.seek(0)
+    return CalamineWorkbook.from_fileobj(buf_or_path)
+
+
 def _load_all_sheets(wb):
-    """全シートを読み込んでキャッシュに格納"""
-    for sheet_name in SHEETS:
-        tab = SHEETS[sheet_name].get("sheet_tab", sheet_name)
-        if tab in wb.sheetnames:
-            _cache[sheet_name] = _parse_sheet(wb, sheet_name)
-    wb.close()
+    """全シートをパースしてキャッシュに格納"""
+    available = set(wb.sheet_names)
+    for sheet_name, cfg in SHEETS.items():
+        tab = cfg.get("sheet_tab", sheet_name)
+        if tab in available:
+            _cache[sheet_name] = _parse_sheet_from_wb(wb, sheet_name)
 
 
 def get_sheet_data(sheet_name):
-    """指定シートのデータを返す（キャッシュ付き）"""
     if ONEDRIVE_SHARE_URL:
         return _get_data_onedrive(sheet_name)
     return _get_data_local(sheet_name)
@@ -98,23 +121,37 @@ def get_sheet_data(sheet_name):
 def _get_data_onedrive(sheet_name):
     from onedrive import fetch_xlsm, _is_cache_fresh
 
-    if _wb_cache["source"] == "onedrive" and sheet_name in _cache and _is_cache_fresh():
+    # ファイルが新鮮かつシートがパース済みならキャッシュを返す
+    if _wb_cache["source"] == "onedrive" and _wb_cache["file_ready"] and sheet_name in _cache and _is_cache_fresh():
         c = _cache[sheet_name]
         return c["rows_data"], c["headers"], c["max_row"]
 
+    # ファイルが新鮮だがシートが未パース（遅延読み込み）
+    if _wb_cache["source"] == "onedrive" and _wb_cache["file_ready"] and _is_cache_fresh() and sheet_name not in _cache:
+        buf = fetch_xlsm(ONEDRIVE_SHARE_URL)
+        wb = _open_wb(buf)
+        _cache[sheet_name] = _parse_sheet_from_wb(wb, sheet_name)
+        c = _cache[sheet_name]
+        return c["rows_data"], c["headers"], c["max_row"]
+
+    # ファイルを新規ダウンロード → 全シートパース
     buf = fetch_xlsm(ONEDRIVE_SHARE_URL)
-    wb = openpyxl.load_workbook(buf, data_only=True, keep_vba=False, read_only=True)
+    wb = _open_wb(buf)
     _load_all_sheets(wb)
-    _wb_cache.update(mtime=None, source="onedrive")
+    _wb_cache.update(mtime=None, source="onedrive", file_ready=True)
     c = _cache[sheet_name]
     return c["rows_data"], c["headers"], c["max_row"]
 
 
 def _refresh_onedrive():
-    from onedrive import invalidate_cache
+    """OneDriveキャッシュをクリアしてファイルだけ再ダウンロード（シートは遅延パース）"""
+    from onedrive import invalidate_cache, fetch_xlsm
     invalidate_cache()
     _cache.clear()
-    _wb_cache.update(mtime=None, source=None)
+    _wb_cache.update(mtime=None, source=None, file_ready=False)
+    # ファイルをダウンロードしてキャッシュに乗せる（パースはしない）
+    fetch_xlsm(ONEDRIVE_SHARE_URL)
+    _wb_cache.update(source="onedrive", file_ready=True)
 
 
 def _get_data_local(sheet_name):
@@ -125,15 +162,14 @@ def _get_data_local(sheet_name):
         raise FileNotFoundError("ebayマスタ*.xlsm が見つかりません")
     mtime = os.path.getmtime(XLSM_PATH)
     if _wb_cache["mtime"] != mtime or _wb_cache["source"] != "local":
-        wb = openpyxl.load_workbook(XLSM_PATH, data_only=True, keep_vba=False, read_only=True)
+        wb = _open_wb(XLSM_PATH)
         _load_all_sheets(wb)
-        _wb_cache.update(mtime=mtime, source="local")
+        _wb_cache.update(mtime=mtime, source="local", file_ready=True)
     c = _cache[sheet_name]
     return c["rows_data"], c["headers"], c["max_row"]
 
 
 def _to_str(val):
-    """セル値を検索用文字列に変換"""
     if val is None:
         return None
     if isinstance(val, float) and val == int(val):
@@ -164,16 +200,12 @@ def index():
 def api_refresh():
     if ONEDRIVE_SHARE_URL:
         try:
-            _refresh_onedrive()
             t0 = time.time()
-            get_sheet_data(list(SHEETS.keys())[0])
+            _refresh_onedrive()
             elapsed = time.time() - t0
-            loaded = list(_cache.keys())
-            missing = [s for s in SHEETS if s not in _cache]
             return jsonify({
                 "status": "refreshed", "source": "onedrive",
                 "elapsed_s": round(elapsed, 2),
-                "loaded_sheets": loaded, "missing_sheets": missing,
             })
         except Exception as e:
             return jsonify({"status": "error", "error": str(e)}), 500
@@ -209,7 +241,6 @@ def api_fileinfo():
 @app.route("/api/search")
 @login_required
 def api_search():
-    """指定シートの指定列で検索"""
     sheet = request.args.get("sheet", "").strip()
     query = request.args.get("q", "").strip()
 
@@ -223,7 +254,6 @@ def api_search():
         search_col = cfg["search_col"]
         data_start = cfg["data_start"]
         max_col = cfg["max_col"]
-
         rows_data, headers, max_row = get_sheet_data(sheet)
     except Exception as e:
         return jsonify({"error": f"シート読み込みエラー: {sheet} - {str(e)}"}), 500
@@ -254,7 +284,6 @@ def api_search():
 @app.route("/api/sheets")
 @login_required
 def api_sheets():
-    """利用可能なシート一覧を返す"""
     result = []
     for name, cfg in SHEETS.items():
         result.append({"name": name, "display_name": cfg.get("sheet_tab", name), "search_label": cfg["search_label"]})
@@ -263,7 +292,6 @@ def api_sheets():
 
 @app.route("/api/debug-env")
 def api_debug_env():
-    import os
     return jsonify({
         "ONEDRIVE_SHARE_URL_set": bool(os.environ.get("ONEDRIVE_SHARE_URL")),
         "ONEDRIVE_SHARE_URL_len": len(os.environ.get("ONEDRIVE_SHARE_URL", "")),
