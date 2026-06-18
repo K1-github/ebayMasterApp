@@ -61,20 +61,25 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
         resolved_url = resolved.url
         # onedrive.live.com の直接ダウンロードURLに変換
         if "onedrive.live.com" in resolved_url or "sharepoint.com" in resolved_url:
-            from urllib.parse import urlparse, parse_qs, urlencode
+            from urllib.parse import urlparse, parse_qs
             parsed = urlparse(resolved_url)
             params = parse_qs(parsed.query)
             resid = params.get("resid", [None])[0]
             authkey = params.get("authkey", [None])[0]
-            cid = params.get("cid", [None])[0]
+
             if resid and authkey:
                 direct = f"https://onedrive.live.com/download?resid={resid}&authkey={authkey}&em=2"
-                resp2 = session.get(direct, headers=headers, timeout=60)
-                resp2.raise_for_status()
-                content_type2 = resp2.headers.get("Content-Type", "")
-                if "html" not in content_type2:
-                    resp = resp2
-                    content_type = content_type2
+            else:
+                # /:x:/g/personal/CID/FileID 形式 → ?download=1 を付与
+                sep = "&" if "?" in resolved_url else "?"
+                direct = resolved_url + sep + "download=1"
+
+            resp2 = session.get(direct, headers=headers, timeout=60)
+            resp2.raise_for_status()
+            content_type2 = resp2.headers.get("Content-Type", "")
+            if "html" not in content_type2:
+                resp = resp2
+                content_type = content_type2
 
         if "html" in resp.headers.get("Content-Type", ""):
             raise ValueError(
