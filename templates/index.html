@@ -126,7 +126,11 @@ fetch("/api/sheets")
               html += `<tr><td>${row.row}</td>`;
               data.headers.forEach(h => {
                 const v = row.data[h.letter];
-                html += `<td>${v !== null ? v : ""}</td>`;
+                if (v && /^https?:\/\//i.test(v)) {
+                  html += `<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;"><a href="${v}" target="_blank" rel="noopener" title="${v}">${v}</a></td>`;
+                } else {
+                  html += `<td>${v !== null ? v : ""}</td>`;
+                }
               });
               html += "</tr>";
             });
