@@ -278,7 +278,7 @@ def api_search():
             row_data = {}
             for col in range(max_col):
                 v = row_values[col] if col < len(row_values) else None
-                row_data[headers[col]["letter"]] = str(v) if v is not None else None
+                row_data[headers[col]["letter"]] = _to_str(v)
             matched.append({"row": r, "data": row_data})
 
     return jsonify({
