@@ -272,6 +272,8 @@ function updateFileInfo() {
         if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);
         const updated = timeAgo(info.last_modified);
         if (updated) parts.push(`<b>データ更新:</b> ${updated}`);
+        const fetched = timeAgo(info.fetched_at);
+        if (fetched) parts.push(`<b>最終取得:</b> ${fetched}`);
         if (info.content_length) parts.push(`<b>サイズ:</b> ${(info.content_length/1024/1024).toFixed(1)} MB`);
       } else {
         if (info.filename) parts.push(`<b>ファイル名:</b> ${info.filename}`);
