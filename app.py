@@ -38,6 +38,7 @@ XLSM_PATH = _find_xlsm()
 SHEETS = {
     "仕入・在庫管理表": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "販売管理表": {"header_row": 5, "data_start": 6, "search_col": 0, "search_label": "レコード番号（A列）", "max_col": 28},
+    "販売管理表_出品管理ID": {"sheet_tab": "販売管理表", "header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "無在庫管理表(中古)": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "出品管理表": {"header_row": 6, "data_start": 7, "search_col": 2, "search_label": "出品管理ID（C列）", "max_col": 28},
 }
@@ -50,7 +51,7 @@ _wb_cache = {"mtime": None, "source": None}
 def _parse_sheet(wb, sheet_name):
     """指定シートのデータとヘッダーを読み取る"""
     cfg = SHEETS[sheet_name]
-    ws = wb[sheet_name]
+    ws = wb[cfg.get("sheet_tab", sheet_name)]
     header_row = cfg["header_row"]
     max_col = cfg["max_col"]
 
@@ -81,7 +82,8 @@ def _parse_sheet(wb, sheet_name):
 def _load_all_sheets(wb):
     """全シートを読み込んでキャッシュに格納"""
     for sheet_name in SHEETS:
-        if sheet_name in wb.sheetnames:
+        tab = SHEETS[sheet_name].get("sheet_tab", sheet_name)
+        if tab in wb.sheetnames:
             _cache[sheet_name] = _parse_sheet(wb, sheet_name)
     wb.close()
 
@@ -255,7 +257,7 @@ def api_sheets():
     """利用可能なシート一覧を返す"""
     result = []
     for name, cfg in SHEETS.items():
-        result.append({"name": name, "search_label": cfg["search_label"]})
+        result.append({"name": name, "display_name": cfg.get("sheet_tab", name), "search_label": cfg["search_label"]})
     return jsonify(result)
 
 

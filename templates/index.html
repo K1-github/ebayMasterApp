@@ -87,7 +87,7 @@ fetch("/api/sheets")
       const div = document.createElement("div");
       div.className = "panel";
       div.innerHTML = `
-        <h2>${sheet.name} — ${sheet.search_label}検索</h2>
+        <h2>${sheet.display_name || sheet.name} — ${sheet.search_label}検索</h2>
         <div class="controls">
           <label>${sheet.search_label}:</label>
           <input type="text" id="${inputId}" placeholder="検索値を入力">
@@ -126,7 +126,7 @@ fetch("/api/sheets")
               if (v === null || v === "") return "";
               const n = parseFloat(v);
               if (!isNaN(n)) {
-                if (name && name.includes("利益率")) return n.toFixed(1);
+                if (name && name.includes("利益率")) return (n * 100).toFixed(1) + "%";
                 if (name && (name.includes("利益額") || name.includes("還付金"))) return Math.floor(n).toString();
               }
               return v;
