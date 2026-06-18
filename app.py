@@ -256,6 +256,16 @@ def api_sheets():
     return jsonify(result)
 
 
+@app.route("/api/debug-env")
+def api_debug_env():
+    import os
+    return jsonify({
+        "ONEDRIVE_SHARE_URL_set": bool(os.environ.get("ONEDRIVE_SHARE_URL")),
+        "ONEDRIVE_SHARE_URL_len": len(os.environ.get("ONEDRIVE_SHARE_URL", "")),
+        "dotenv_file_exists": os.path.exists(os.path.join(os.path.dirname(__file__), ".env")),
+    })
+
+
 if __name__ == "__main__":
     source = "OneDrive" if ONEDRIVE_SHARE_URL else f"Local ({XLSM_PATH})"
     print(f"Source: {source}")
