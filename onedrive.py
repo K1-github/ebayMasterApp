@@ -42,18 +42,20 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
         _cache["data"].seek(0)
         return _cache["data"]
 
-    # セッションを使ってリダイレクトチェーンを追跡（Cookie が必要）
     session = requests.Session()
     download_url = _build_download_url(share_url)
-    # OneDrive CDN キャッシュ回避
+    download_url += f"&_t={int(time.time())}"
     headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Cache-Control": "no-cache, no-store",
         "Pragma": "no-cache",
     }
-    # タイムスタンプでURL一意化（CDNキャッシュ回避）
-    download_url += f"&_t={int(time.time())}"
     resp = session.get(download_url, headers=headers, timeout=60)
     resp.raise_for_status()
+
+    content_type = resp.headers.get("Content-Type", "")
+    if "html" in content_type:
+        raise ValueError(f"OneDriveがHTMLを返しました（共有URLが期限切れか無効）。Content-Type: {content_type}")
 
     # レスポンスヘッダーからファイル名を取得
     filename = None
@@ -67,7 +69,6 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
         if m:
             filename = m.group(1)
 
-    content_type = resp.headers.get("Content-Type", "")
     final_url = resp.url
 
     buf = io.BytesIO(resp.content)
