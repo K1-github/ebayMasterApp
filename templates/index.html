@@ -122,6 +122,15 @@ fetch("/api/sheets")
             let html = "<table><thead><tr><th>行</th>";
             data.headers.forEach(h => { html += `<th>${h.letter}: ${h.name}</th>`; });
             html += "</tr></thead><tbody>";
+            function formatCell(name, v) {
+              if (v === null || v === "") return "";
+              const n = parseFloat(v);
+              if (!isNaN(n)) {
+                if (name && name.includes("利益率")) return n.toFixed(1);
+                if (name && (name.includes("利益額") || name.includes("還付金"))) return Math.floor(n).toString();
+              }
+              return v;
+            }
             data.rows.forEach(row => {
               html += `<tr><td>${row.row}</td>`;
               data.headers.forEach(h => {
@@ -129,7 +138,7 @@ fetch("/api/sheets")
                 if (v && /^https?:\/\//i.test(v)) {
                   html += `<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;"><a href="${v}" target="_blank" rel="noopener" title="${v}">${v}</a></td>`;
                 } else {
-                  html += `<td>${v !== null ? v : ""}</td>`;
+                  html += `<td>${formatCell(h.name, v !== null ? v : "")}</td>`;
                 }
               });
               html += "</tr>";
