@@ -41,7 +41,7 @@ SHEETS = {
     "販売管理表_出品管理ID": {"sheet_tab": "販売管理表", "header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "無在庫管理表(中古)": {"header_row": 5, "data_start": 6, "search_col": 1, "search_label": "出品管理ID（B列）", "max_col": 28},
     "出品管理表": {"header_row": 6, "data_start": 7, "search_col": 2, "search_label": "出品管理ID（C列）", "max_col": 28},
-    "DDP": {"header_row": 5, "data_start": 6, "search_col": 2, "search_label": "出品管理ID（C列）", "max_col": 28},
+    "DDP": {"header_row": 5, "data_start": 6, "search_col": 2, "auto_header": "出品管理ID", "search_label": "出品管理ID", "max_col": 28},
 }
 
 # シートごとのパース済みキャッシュ
@@ -67,9 +67,24 @@ def _parse_sheet_from_wb(wb, sheet_name):
     header_row = cfg["header_row"]
     max_col = cfg["max_col"]
     data_start = cfg["data_start"]
+    search_col = cfg["search_col"]
 
     sheet = wb.get_sheet_by_name(tab)
     all_rows = sheet.to_python(skip_empty_area=False)
+
+    # auto_header が指定されている場合、そのキーワードを含む行をヘッダー行として自動検出
+    keyword = cfg.get("auto_header")
+    if keyword:
+        for i, row_values in enumerate(all_rows[:30]):
+            for c, v in enumerate(row_values[:max_col]):
+                if v is not None and keyword in str(v):
+                    header_row = i + 1
+                    data_start = header_row + 1
+                    search_col = c
+                    break
+            else:
+                continue
+            break
 
     rows_data = {}
     max_data_row = header_row
@@ -92,7 +107,10 @@ def _parse_sheet_from_wb(wb, sheet_name):
         name = str(val) if val is not None else f"({letter})"
         headers.append({"col": col + 1, "letter": letter, "name": name})
 
-    return {"rows_data": rows_data, "headers": headers, "max_row": max_data_row}
+    return {
+        "rows_data": rows_data, "headers": headers, "max_row": max_data_row,
+        "data_start": data_start, "search_col": search_col,
+    }
 
 
 def _open_wb(buf_or_path):
@@ -265,10 +283,12 @@ def api_search():
 
     try:
         cfg = SHEETS[sheet]
-        search_col = cfg["search_col"]
-        data_start = cfg["data_start"]
         max_col = cfg["max_col"]
         rows_data, headers, max_row = get_sheet_data(sheet)
+        # auto_header検出後の実効値をキャッシュから取得
+        cached = _cache.get(sheet, {})
+        search_col = cached.get("search_col", cfg["search_col"])
+        data_start = cached.get("data_start", cfg["data_start"])
     except Exception as e:
         return jsonify({"error": f"シート読み込みエラー: {sheet} - {str(e)}"}), 500
 
