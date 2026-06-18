@@ -70,9 +70,14 @@ def fetch_xlsm(share_url: str) -> io.BytesIO:
             if resid and authkey:
                 direct = f"https://onedrive.live.com/download?resid={resid}&authkey={authkey}&em=2"
             else:
-                # /:x:/g/personal/CID/FileID 形式 → ?download=1 を付与
-                sep = "&" if "?" in resolved_url else "?"
-                direct = resolved_url + sep + "download=1"
+                # /:x:/g/personal/CID/FileID 形式
+                # 元の共有URLの e= トークンを保持しつつ download=1 を付与
+                from urllib.parse import urlparse, parse_qs, urlencode
+                orig_params = parse_qs(urlparse(share_url).query)
+                e_token = orig_params.get("e", [None])[0]
+                base = resolved_url.split("?")[0]
+                extra = f"e={e_token}&download=1" if e_token else "download=1"
+                direct = base + "?" + extra
 
             resp2 = session.get(direct, headers=headers, timeout=60)
             resp2.raise_for_status()
