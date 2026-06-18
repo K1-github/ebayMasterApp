@@ -72,31 +72,49 @@ document.getElementById("btn-refresh").addEventListener("click", () => {
     .finally(() => { btn.disabled = false; });
 });
 
-// シート一覧を取得して検索パネルを動的生成
+// シート一覧を取得して検索パネルを動的生成（シートごとにグループ化）
 fetch("/api/sheets")
   .then(r => r.json())
   .then(sheets => {
     const container = document.getElementById("search-panels");
-    sheets.forEach((sheet, idx) => {
-      const panelId = `panel-${idx}`;
-      const inputId = `input-${idx}`;
-      const btnId = `btn-${idx}`;
-      const countId = `count-${idx}`;
-      const resultId = `result-${idx}`;
 
-      const div = document.createElement("div");
-      div.className = "panel";
-      div.innerHTML = `
-        <h2>${sheet.display_name || sheet.name} — ${sheet.search_label}検索</h2>
-        <div class="controls">
-          <label>${sheet.search_label}:</label>
-          <input type="text" id="${inputId}" placeholder="検索値を入力">
-          <button id="${btnId}">検索</button>
-        </div>
-        <div class="count" id="${countId}"></div>
-        <div class="table-wrap" id="${resultId}" style="margin-top:12px;"></div>
-      `;
-      container.appendChild(div);
+    // display_name でグループ化
+    const groups = [];
+    const groupMap = {};
+    sheets.forEach(sheet => {
+      const key = sheet.display_name || sheet.name;
+      if (!groupMap[key]) {
+        groupMap[key] = [];
+        groups.push({ key, items: groupMap[key] });
+      }
+      groupMap[key].push(sheet);
+    });
+
+    groups.forEach(group => {
+      const groupDiv = document.createElement("div");
+      groupDiv.style.cssText = "background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);";
+      groupDiv.innerHTML = `<h2 style="font-size:1.1rem;margin-bottom:16px;color:#333;border-bottom:2px solid #4a90d9;padding-bottom:8px;">${group.key}</h2>`;
+      container.appendChild(groupDiv);
+
+      group.items.forEach((sheet, idx) => {
+        const uid = `${group.key}-${idx}`;
+        const inputId = `input-${uid}`;
+        const btnId = `btn-${uid}`;
+        const countId = `count-${uid}`;
+        const resultId = `result-${uid}`;
+
+        const searchDiv = document.createElement("div");
+        searchDiv.style.cssText = "margin-bottom:20px;";
+        searchDiv.innerHTML = `
+          <div class="controls">
+            <label>${sheet.search_label}:</label>
+            <input type="text" id="${inputId}" placeholder="検索値を入力">
+            <button id="${btnId}">検索</button>
+          </div>
+          <div class="count" id="${countId}"></div>
+          <div class="table-wrap" id="${resultId}" style="margin-top:12px;"></div>
+        `;
+        groupDiv.appendChild(searchDiv);
 
       function doSearch() {
         const q = document.getElementById(inputId).value.trim();
@@ -149,8 +167,9 @@ fetch("/api/sheets")
           .catch(err => { resultEl.innerHTML = `<span class="error">通信エラー: ${err}</span>`; });
       }
 
-      document.getElementById(btnId).addEventListener("click", doSearch);
-      document.getElementById(inputId).addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+        document.getElementById(btnId).addEventListener("click", doSearch);
+        document.getElementById(inputId).addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+      });
     });
   });
 </script>
